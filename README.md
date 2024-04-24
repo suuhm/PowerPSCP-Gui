@@ -17,9 +17,10 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass
 ```
 
 ## Usage:
-1. Setup Server, Port, Username and Password of your SSH Server  
-2. Click "..." and choose the file you want upload
-3. Start Upload 
+1. Download PSCP from https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html or use the pscp.exe in this repo
+2. Setup Server, Port, Username and Password of your SSH Server  
+3. Click "..." and choose the file you want upload
+4. Start Upload 
 
 
 
