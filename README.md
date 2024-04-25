@@ -2,12 +2,19 @@
 ![grafik](https://github.com/suuhm/PowerPSCP-Gui/assets/11504990/3d41ab0b-e68d-452c-bd7c-5de6555e7593)
 
 
+Graphical interface for PSCP purely written in Powershell
+> 
+>> Runs on all Powershell versions
+>> 
+>> Smart Gui for uploading your stuff 
+>>
+>> Automatic detection of ssh server Hostkey if no regitry key is cached
+>  
 
-> Graphical interface for PSCP purely written in Powershell
->
->    
+![grafik](https://github.com/suuhm/PowerPSCP-Gui/assets/11504990/b0fb9c80-b9d1-473f-aeec-e557f8a9f694)
 
-![grafik](https://github.com/suuhm/PowerPSCP-Gui/assets/11504990/7f539462-01f7-4df2-9c70-8cc9aef2e884)
+![grafik](https://github.com/suuhm/PowerPSCP-Gui/assets/11504990/ef6a4370-2caf-4e74-8a41-e694a94224be)
+
 
 
 ## Start with:
