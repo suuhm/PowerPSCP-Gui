@@ -17,13 +17,18 @@ Add-Type -AssemblyName System.Management.Automation
 $ext_dir = "/tmp/"
 $pscpPath = ".\pscp.exe"
 
+# For setup manual hostkey:
+$global:g_hostKey=""
+$need_hostkey = $true
+
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'PowerPSCP Gui v0.2b     (c) 2024 by suuhm'
-$form.Size = New-Object System.Drawing.Size(420, 360)
+$form.Size = New-Object System.Drawing.Size(410, 360)
 $form.StartPosition = 'CenterScreen'
 $form.MaximizeBox=$false
-#$iconPath = "$env:SystemRoot\system32\calc.exe"
+$form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+$iconPath = "$env:SystemRoot\system32\calc.exe"
 $iconIndex = 9
 $iconPath=$pscpPath
 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
@@ -33,6 +38,53 @@ $form.Icon = [System.Drawing.Icon]::FromHandle($icon.GetHicon())
 
 # Setup new ps guistyles
 [System.Windows.Forms.Application]::EnableVisualStyles()
+
+function Show-HostKeyPrompt($hk) {
+    # Erstellen des Hauptformulars
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Hostkey Verification"
+    $form.Size = New-Object System.Drawing.Size(270, 150)
+    $form.StartPosition = 'CenterScreen'
+    $iconPath=$pscpPath
+    $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+    $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath).ToBitmap()
+    $form.Icon = [System.Drawing.Icon]::FromHandle($icon.GetHicon())
+    $form.TopMost = $true
+    $form.MaximizeBox=$false
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+
+    # Label für die Nachricht
+    $label = New-Object System.Windows.Forms.Label
+    $label.Location = New-Object System.Drawing.Point(10, 10)
+    $label.Size = New-Object System.Drawing.Size(280, 60)
+    $label.Text = "Found unknown Hostkey ($hk) `r`n`r`nDo you want to accept the host key?"
+    $form.Controls.Add($label)
+
+    # Ja Button
+    $yesButton = New-Object System.Windows.Forms.Button
+    $yesButton.Location = New-Object System.Drawing.Point(50, 70)
+    $yesButton.Size = New-Object System.Drawing.Size(75, 23)
+    $yesButton.Text = "Yes"
+    $yesButton.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+    $form.Controls.Add($yesButton)
+    $form.AcceptButton = $yesButton
+
+    # Nein Button
+    $noButton = New-Object System.Windows.Forms.Button
+    $noButton.Location = New-Object System.Drawing.Point(150, 70)
+    $noButton.Size = New-Object System.Drawing.Size(75, 23)
+    $noButton.Text = "No"
+    $noButton.DialogResult = [System.Windows.Forms.DialogResult]::No
+    $form.Controls.Add($noButton)
+    $form.CancelButton = $noButton
+
+    # Anzeigen des Formulars
+    $form.ShowDialog()
+
+    # Rückgabe des Ergebnisses
+    return $form.DialogResult
+}
+
 
 # Server Label TextBox
 $label1 = New-Object System.Windows.Forms.Label
@@ -44,7 +96,7 @@ $form.Controls.Add($label1)
 $textBoxServer = New-Object System.Windows.Forms.TextBox
 $textBoxServer.Location = New-Object System.Drawing.Point(100,10)
 $textBoxServer.Size = New-Object System.Drawing.Size(110,20)
-$textBoxServer.Text = "127.0.0.1"
+$textBoxServer.Text = "10.20.30.60"
 $form.Controls.Add($textBoxServer)
 
 # Port Label und TextBox
@@ -111,12 +163,28 @@ $buttonSelectFile.Add_Click({
 })
 $form.Controls.Add($buttonSelectFile)
 
+# Checkup hashkey
+$checkbox = New-Object System.Windows.Forms.CheckBox
+$checkbox.Location = New-Object System.Drawing.Point(10, 225)
+$checkbox.Size = New-Object System.Drawing.Size(600, 20)
+$checkbox.Text = 'Autodetect hostkey fix'
+$checkbox.Checked = $true
+
+$checkbox.Add_CheckedChanged({
+    if ($checkbox.Checked) {
+        $need_hostkey = $true
+        $global:g_hostKey=""
+    } else {
+        $need_hostkey = $false
+    }
+})
+$form.Controls.Add($checkbox)
 
 
 # RichTextBox and Progress
 $richTextBox = New-Object System.Windows.Forms.RichTextBox
 $richTextBox.Location = New-Object System.Drawing.Point(10, 100)
-$richTextBox.Size = New-Object System.Drawing.Size(380, 140)
+$richTextBox.Size = New-Object System.Drawing.Size(380, 120)
 $richTextBox.Multiline = $true
 $richTextBox.ScrollBars = 'Vertical'
 $form.Controls.Add($richTextBox)
@@ -166,12 +234,26 @@ $scriptBlock = {
 # RS start asyncblock
 #$asyncHandle = $powerShell.BeginInvoke()
 
-
-
+$global:process = $null
 
 $buttonUpload.Add_Click({
-    $progressBar.Visible=$true
+    $progressBar.Visible = $true
     #$progressBar.Style = 'Marquee'
+    $buttonUpload.Text = "Stop Upload"
+
+     if ($global:currentProcess -ne $null -and !$global:currentProcess.HasExited) {
+        # Prozess läuft noch, beenden Sie ihn
+        $global:currentProcess.Kill()
+        $global:currentProcess.WaitForExit()
+        $global:currentProcess = $null
+        $richTextBox.AppendText("Stopping process.`r`n")
+        $progressBar.Value = 0
+        $progressBar.Visible = $false
+        Start-Sleep -Milliseconds 200
+        $progressBar.Style = "Blocks"
+        $buttonUpload.Text = "Start Upload"
+        return
+     }
 
     #Start-Timeouter
 
@@ -194,7 +276,74 @@ $buttonUpload.Add_Click({
     $username = $textBoxUsername.Text
     $password = $textBoxPassword.Text
     $filePath = $textBoxFilePath.Text
-    $arguments = "-scp -batch -r -P $port -pw $password `"$filePath`" $username@${server}:${ext_dir}"
+    if ($global:g_hostKey) {
+        $arguments = "-scp -batch -r -hostkey $global:g_hostKey -P $port -pw $password `"$filePath`" $username@${server}:${ext_dir}"
+    } else {
+        $arguments = "-scp -batch -r -P $port -pw $password `"$filePath`" $username@${server}:${ext_dir}"
+    }
+
+    if (!$filePath) { 
+    $richTextBox.AppendText("`r`n[!] You have to choose a filename to proceed `r`nFailed connecting to server ${server}:$port ...")
+    Start-Sleep -Milliseconds 200 ; $progressBar.Style = "Blocks" ; $buttonUpload.Text = "Start Upload"
+    return 9
+    }
+
+
+    # CHECK AND GET HOSTKEY FIX
+    # --------------------------
+    if (($need_hostkey -eq $true -and $checkbox.Checked -eq $true) -and !$global:g_hostKey)
+    {      
+        $arguments = "-v -scp -batch -r -P $port -pw $password `"$filePath`" $username@${server}:${ext_dir}"
+
+        # DEBUG ARGS:
+        #Write-Host "$pscpPath $arguments"
+
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo.FileName = $pscpPath
+        $process.StartInfo.Arguments = $arguments
+        $process.StartInfo.RedirectStandardOutput = $true
+        $process.StartInfo.FileName
+        $process.StartInfo.RedirectStandardError = $true
+        $process.StartInfo.UseShellExecute = $false
+        $process.StartInfo.CreateNoWindow = $true
+
+        $process.Start() | Out-Null
+        $process.WaitForExit()
+
+        $hktext = $process.StandardError.ReadToEnd()
+        #Write-Host "keyxss is $hktext"
+
+        # Regex hostkey
+        if ($hktext -match '([\da-f:]{47})') {
+            $hostKey = $matches[1]
+            $richTextBox.AppendText("`r`n[*] Found Hostkey-Fingerprint: $hostKey")
+        } else {
+            $richTextBox.AppendText("`r`nNo Hostkey-Fingerprint found; exit..")
+            Start-Sleep -Milliseconds 200 ; $progressBar.Style = "Blocks" ; $buttonUpload.Text = "Start Upload"
+            return 11
+        }
+
+        if ($hostKey) 
+        {
+            $result = Show-HostKeyPrompt -hk $hostKey
+
+            if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $richTextBox.AppendText("`r`n[*] You have accepted the hostkey ($hostKey)`r`nNow connection to server ${server}:$port ...")
+            } else {
+                $richTextBox.AppendText("`r`n[*] You don't have accepted the hostkey ($hostKey)`r`nFailed to connect to server ${server}:$port ...")
+                Start-Sleep -Milliseconds 200 ; $progressBar.Style = "Blocks" ; $buttonUpload.Text = "Start Upload"
+                return 12
+            }
+        }
+
+        $need_hostkey = $false
+        $global:g_hostKey = $hostKey
+        $checkbox.Text = "Autodetect hostkey fix ($hostKey)"
+        $checkbox.Checked = $false
+        $arguments = "-scp -batch -r -hostkey $hostKey -P $port -pw $password `"$filePath`" $username@${server}:${ext_dir}"
+    }
+
+
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo.FileName = $pscpPath
@@ -241,10 +390,13 @@ $buttonUpload.Add_Click({
 
     $richTextBox.AppendText($reader.ReadToEnd())
     $richTextBox.AppendText($errorReader.ReadToEnd())
-    $progressBar.Style = 'Blocks'
+    
 
 })
 
+Start-Sleep -Milliseconds 200
+$progressBar.Style = "Blocks"
+$buttonUpload.Text = "Start Upload"
 
 $form.Controls.Add($buttonUpload)
 
