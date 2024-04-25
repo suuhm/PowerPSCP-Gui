@@ -96,7 +96,7 @@ $form.Controls.Add($label1)
 $textBoxServer = New-Object System.Windows.Forms.TextBox
 $textBoxServer.Location = New-Object System.Drawing.Point(100,10)
 $textBoxServer.Size = New-Object System.Drawing.Size(110,20)
-$textBoxServer.Text = "10.20.30.60"
+$textBoxServer.Text = "127.0.0.1"
 $form.Controls.Add($textBoxServer)
 
 # Port Label und TextBox
@@ -386,17 +386,16 @@ $buttonUpload.Add_Click({
 
     #$richTextBox.Text = $reader.ReadToEnd()
 
+    $progressBar.Value = 100
     $progressBar.PerformStep()
 
     $richTextBox.AppendText($reader.ReadToEnd())
     $richTextBox.AppendText($errorReader.ReadToEnd())
     
-
+    Start-Sleep -Milliseconds 666
+    $progressBar.Style = "Blocks"
+    $buttonUpload.Text = "Start Upload"
 })
-
-Start-Sleep -Milliseconds 200
-$progressBar.Style = "Blocks"
-$buttonUpload.Text = "Start Upload"
 
 $form.Controls.Add($buttonUpload)
 
